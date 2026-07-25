@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Play Carnatic swaras and ragams in the browser with real instrument sounds (sitar, violin, flute, shehnai).">
+<title>Carnatic Swara Keyboard</title>
+<style>
+  :root {
+    --bg: #0c0e14;
+    --panel: #161a24;
+    --text: #e6e6eb;
+    --dim: #5a5f6e;
+    --gold: #ffc85a;
+    --green: #5adc82;
+    --green-bg: #143723;
+    --orange: #ff963c;
+    --key-bg: #232834;
+    --key-border: #3c4252;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Consolas", "Courier New", monospace;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  h1 {
+    color: var(--gold);
+    font-size: 26px;
+    margin: 0 0 12px 0;
+    letter-spacing: 1px;
+  }
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 10px;
+    font-size: 15px;
+  }
+  .row button {
+    background: var(--key-bg);
+    color: var(--text);
+    border: 1px solid var(--key-border);
+    border-radius: 5px;
+    padding: 5px 10px;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .row button:hover { border-color: var(--gold); color: var(--gold); }
+  .mode-swara { color: var(--text); }
+  .mode-ragam { color: var(--green); }
+  #ragamPanel {
+    display: none;
+    background: var(--panel);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    font-size: 14px;
+  }
+  #ragamPanel .mk { color: var(--dim); font-size: 12px; margin-bottom: 4px; }
+  #ragamPanel .line { margin: 2px 0; }
+  #keysWrap {
+    overflow-x: auto;
+    padding-bottom: 10px;
+  }
+  #keys {
+    display: flex;
+    min-width: max-content;
+  }
+  .key {
+    width: 54px;
+    height: 240px;
+    margin-right: 3px;
+    background: var(--key-bg);
+    border: 2px solid var(--key-border);
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 10px;
+    user-select: none;
+    cursor: pointer;
+    transition: background 0.05s, border-color 0.05s;
+    flex-shrink: 0;
+  }
+  .key.group-gap { margin-left: 6px; }
+  .key .kc {
+    font-size: 20px;
+    font-weight: bold;
+    margin-bottom: 30px;
+  }
+  .key .lab {
+    font-size: 16px;
+    margin-bottom: 6px;
+  }
+  .key .full {
+    font-size: 11px;
+    line-height: 15px;
+    text-align: center;
+    margin-top: auto;
+    margin-bottom: 10px;
+    padding: 0 2px;
+  }
+  .key.active {
+    background: var(--green-bg);
+    border-color: var(--green);
+  }
+  .key.pressed {
+    background: var(--gold) !important;
+    border-color: #fff !important;
+  }
+  .key.pressed .kc, .key.pressed .lab, .key.pressed .full {
+    color: #141414 !important;
+  }
+  footer {
+    margin-top: 18px;
+    font-size: 12px;
+    color: var(--dim);
+  }
+  #startOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(12,14,20,0.92);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    cursor: pointer;
+  }
+  #startOverlay div {
+    color: var(--gold);
+    font-size: 18px;
+    border: 1px solid var(--key-border);
+    padding: 20px 30px;
+    border-radius: 8px;
+    background: var(--panel);
+  }
+  select#instrumentSelect {
+    background: var(--key-bg);
+    color: var(--text);
+    border: 1px solid var(--key-border);
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-family: inherit;
+    font-size: 13px;
+  }
+  #instrumentStatus {
+    font-size: 12px;
+    color: var(--dim);
+  }
+  #instrumentStatus.loading { color: var(--orange); }
+  input#volumeSlider {
+    vertical-align: middle;
+    accent-color: var(--gold);
+  }
+</style>
+</head>
+<body>
+
+<div id="startOverlay"><div>Click anywhere to enable audio, then start playing ▶</div></div>
+
+<h1>CARNATIC SWARA KEYBOARD</h1>
+
+<div class="row">
+  <button id="modeBtn">[<span id="modeLabel">SWARA MODE</span>]  (Tab)</button>
+  <span>Sruthi: <b id="sruthiLabel"></b>
+    <button id="sruthiDown">↓</button>
+    <button id="sruthiUp">↑</button>
+  </span>
+  <span>Instrument:
+    <select id="instrumentSelect"></select>
+    <span id="instrumentStatus"></span>
+  </span>
+  <span>Volume:
+    <input type="range" id="volumeSlider" min="0" max="100" value="70">
+  </span>
+  <span id="ragamControls" style="display:none">
+    Ragam: <b id="ragamLabel"></b>
+    <button id="ragamPrev">PgDn</button>
+    <button id="ragamNext">PgUp</button>
+    <button id="playAro">Play Arohanam (Enter)</button>
+    <button id="playAva">Play Avarohanam (Backspace)</button>
+  </span>
+</div>
+
+<div id="ragamPanel">
+  <div class="mk" id="ragamMelakarta"></div>
+  <div class="line">Arohanam:   <span id="ragamAro"></span></div>
+  <div class="line">Avarohanam: <span id="ragamAva"></span></div>
+</div>
+
+<div id="keysWrap">
+  <div id="keys"></div>
+</div>
+
+<footer>
+  Number/letter keys = play notes &nbsp;|&nbsp; ↑/↓ = sruthi &nbsp;|&nbsp; Tab = mode &nbsp;|&nbsp;
+  PgUp/PgDn = ragam &nbsp;|&nbsp; Enter = arohanam &nbsp;|&nbsp; Backspace = avarohanam &nbsp;|&nbsp;
+  Green = in ragam &nbsp;|&nbsp; Gold = just played &nbsp;|&nbsp;
+  Group colors: S/P gold, R blue, G teal, M red, D purple, N pink
+</footer>
+
+<script src="https://unpkg.com/soundfont-player@0.12.0/dist/soundfont-player.min.js"></script>
+<script>
+// ─── SWARA DATA ───────────────────────────────────────────────────
+const SWARA_SHORT = ["S", "R1", "R2/G1", "R3/G2", "G3",
+               "M1", "M2", "P", "D1", "D2/N1", "D3/N2", "N3"];
+
+const SWARA_FULL = [
+    "Shadjam", "Shuddha Rishabham",
+    "Chatusruti Ri / Shuddha Ga", "Shatsruti Ri / Sadharana Ga",
+    "Antara Gandharam", "Shuddha Madhyamam", "Prathi Madhyamam",
+    "Panchamam", "Shuddha Dhaivatam",
+    "Chatusruti Dha / Shuddha Ni", "Shatsruti Dha / Kaisiki Ni",
+    "Kakali Nishadam"
+];
+
+const SWARA_GROUP = ["S", "R", "R", "R", "G", "M", "M", "P", "D", "D", "D", "N"];
+
+const SRUTHI_NAMES = ["C  (1 kattai)", "C# (1.5 kattai)", "D  (2 kattai)",
+                "D# (2.5 kattai)", "E  (3 kattai)", "F  (3.5 kattai)",
+                "F# (4 kattai)", "G  (4.5 kattai)", "G# (5 kattai)",
+                "A  (5.5 kattai)", "A# (6 kattai)", "B  (6.5 kattai)"];
+
+const SRUTHI_BASE = [130.81, 138.59, 146.83, 155.56, 164.81, 174.61,
+               185.00, 196.00, 207.65, 220.00, 233.08, 246.94];
+
+function getFreq(semitone, sruthiIdx, octave = 0) {
+    return SRUTHI_BASE[sruthiIdx] * Math.pow(2, semitone / 12 + octave);
+}
+
+// ─── NOTE RANGE: lower Pa to upper Pa ─────────────────────────────
+const NOTE_RANGE = [];
+for (const s of [7, 8, 9, 10, 11]) NOTE_RANGE.push([s, -1]);
+for (let s = 0; s < 12; s++) NOTE_RANGE.push([s, 0]);
+for (const s of [0, 1, 2, 3, 4, 5, 6, 7]) NOTE_RANGE.push([s, 1]);
+
+const NUM_KEYS = NOTE_RANGE.length; // 25
+
+// ─── COMPUTER KEY MAPPING ──────────────────────────────────────────
+const KEY_CHARS = "1234567890qwertyuiopasdfg".split("");
+
+// ─── RAGAM DATA ────────────────────────────────────────────────────
+const RAGAMS = [
+    {name: "Mayamalavagowla", melakarta: 15,
+     arohanam: [0,1,4,5,7,8,11,12], avarohanam: [12,11,8,7,5,4,1,0]},
+    {name: "Shankarabharanam", melakarta: 29,
+     arohanam: [0,2,4,5,7,9,11,12], avarohanam: [12,11,9,7,5,4,2,0]},
+    {name: "Kalyani", melakarta: 65,
+     arohanam: [0,2,4,6,7,9,11,12], avarohanam: [12,11,9,7,6,4,2,0]},
+    {name: "Mohana", melakarta: 0,
+     arohanam: [0,2,4,7,9,12], avarohanam: [12,9,7,4,2,0]},
+    {name: "Bhairavi", melakarta: 0,
+     arohanam: [0,2,3,5,7,9,10,12], avarohanam: [12,10,9,7,5,3,2,0]},
+    {name: "Malayamarutam", melakarta: 0,
+     arohanam: [0,1,4,5,7,8,11,12], avarohanam: [12,11,8,7,5,1,0]},
+    {name: "Hamsadhvani", melakarta: 0,
+     arohanam: [0,2,4,7,11,12], avarohanam: [12,11,7,4,2,0]},
+    {name: "Abhogi", melakarta: 0,
+     arohanam: [0,2,3,5,9,12], avarohanam: [12,9,5,3,2,0]},
+    {name: "Hindolam", melakarta: 0,
+     arohanam: [0,3,5,8,10,12], avarohanam: [12,10,8,5,3,0]},
+    {name: "Kambhoji", melakarta: 0,
+     arohanam: [0,2,4,5,7,9,12], avarohanam: [12,11,9,7,5,4,2,0]},
+    {name: "Todi", melakarta: 0,
+     arohanam: [0,1,3,6,7,8,11,12], avarohanam: [12,11,8,7,6,3,1,0]},
+    {name: "Bilahari", melakarta: 0,
+     arohanam: [0,2,4,7,9,12], avarohanam: [12,11,9,7,4,2,0]},
+    {name: "Saveri", melakarta: 0,
+     arohanam: [0,1,5,7,8,12], avarohanam: [12,11,8,7,5,1,0]},
+    {name: "Varali", melakarta: 0,
+     arohanam: [0,1,3,6,7,8,11,12], avarohanam: [12,11,8,7,6,3,1,0]},
+    {name: "Kharaharapriya", melakarta: 22,
+     arohanam: [0,2,3,5,7,9,10,12], avarohanam: [12,10,9,7,5,3,2,0]},
+    {name: "Natabhairavi", melakarta: 20,
+     arohanam: [0,2,3,5,7,8,10,12], avarohanam: [12,10,8,7,5,3,2,0]},
+    {name: "Harikambhoji", melakarta: 28,
+     arohanam: [0,2,4,5,7,9,10,12], avarohanam: [12,10,9,7,5,4,2,0]},
+    {name: "Hanumatodi", melakarta: 8,
+     arohanam: [0,1,3,5,7,8,11,12], avarohanam: [12,11,8,7,5,3,1,0]},
+    {name: "Shanmukhapriya", melakarta: 56,
+     arohanam: [0,2,3,6,7,8,10,12], avarohanam: [12,10,8,7,6,3,2,0]},
+    // ── Add more ragams here — same pattern ──
+];
+
+function ragamActiveSet(ragam) {
+    const active = new Set();
+    for (const s of [...ragam.arohanam, ...ragam.avarohanam]) active.add(s % 12);
+    return active;
+}
+
+const GROUP_COLORS = {
+    S: "#ffd278", R: "#8cbeff", G: "#96dcbe",
+    M: "#ff9696", P: "#ffd278", D: "#c8a0ff", N: "#ffb4dc",
+};
+
+// ─── AUDIO ─────────────────────────────────────────────────────────
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playFreqSynth(freq, durationMs = 550, volume = 0.5) {
+    if (!freq || freq <= 0) return;
+    const t0 = audioCtx.currentTime;
+    const dur = durationMs / 1000;
+    const fade = 0.02;
+
+    const osc = audioCtx.createOscillator();
+    osc.type = "sine";
+    osc.frequency.value = freq;
+
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(volume, t0 + fade);
+    gain.gain.setValueAtTime(volume, t0 + Math.max(dur - fade, fade));
+    gain.gain.linearRampToValueAtTime(0, t0 + dur);
+
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
+}
+
+// ─── INSTRUMENT (real sampled instruments via soundfont-player) ────
+const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+const INSTRUMENTS = [
+    {label: "Sitar",   name: "sitar"},
+    {label: "Violin",  name: "violin"},
+    {label: "Flute",   name: "flute"},
+    {label: "Shehnai", name: "shanai"},
+    {label: "Synth (sine)", name: null},
+];
+
+const instrumentCache = new Map();
+let currentInstrument = null;   // loaded soundfont-player instrument object, or null = synth
+let currentInstrumentName = INSTRUMENTS[0].name;
+
+function setInstrumentStatus(text, isLoading) {
+    const el = document.getElementById("instrumentStatus");
+    el.textContent = text;
+    el.classList.toggle("loading", !!isLoading);
+}
+
+function loadInstrument(name) {
+    currentInstrumentName = name;
+    if (name === null) {
+        currentInstrument = null;
+        setInstrumentStatus("");
+        return;
+    }
+    if (instrumentCache.has(name)) {
+        currentInstrument = instrumentCache.get(name);
+        setInstrumentStatus("");
+        return;
+    }
+    currentInstrument = null; // fall back to synth while loading
+    setInstrumentStatus("loading…", true);
+    Soundfont.instrument(audioCtx, name).then((inst) => {
+        instrumentCache.set(name, inst);
+        if (currentInstrumentName === name) {
+            currentInstrument = inst;
+            setInstrumentStatus("");
+        }
+    }).catch(() => {
+        setInstrumentStatus("failed to load — using synth", false);
+    });
+}
+
+// Note names line up exactly: SRUTHI_BASE is standard 12-TET starting at C3,
+// so sruthiIdx + semitone maps straight onto chromatic note names with no detuning.
+function noteName(semitone, octaveShift) {
+    const chromatic = sruthiIdx + semitone;
+    const octave = 3 + octaveShift + Math.floor(chromatic / 12);
+    const pitchClass = ((chromatic % 12) + 12) % 12;
+    return NOTE_NAMES[pitchClass] + octave;
+}
+
+let masterVolume = 0.7;
+
+function playNote(semitone, octaveShift, durationMs = 550, volume = 1) {
+    const vol = volume * masterVolume;
+    if (currentInstrument) {
+        currentInstrument.play(noteName(semitone, octaveShift), audioCtx.currentTime, {
+            duration: durationMs / 1000,
+            gain: vol,
+        });
+    } else {
+        playFreqSynth(getFreq(semitone, sruthiIdx, octaveShift), durationMs, vol);
+    }
+}
+
+// ─── STATE ──────────────────────────────────────────────────────────
+let sruthiIdx = 0;
+let mode = 0; // 0 = SWARA, 1 = RAGAM
+let ragamIdx = 0;
+
+function swaraLabelForNote(idx) {
+    const [semitone, octave] = NOTE_RANGE[idx];
+    let short = SWARA_SHORT[semitone];
+    if (octave < 0) short += ".";
+    else if (octave > 0) short += "'";
+    return short;
+}
+
+// ─── BUILD KEY ELEMENTS ─────────────────────────────────────────────
+const keysEl = document.getElementById("keys");
+const keyEls = [];
+let prevGroup = null;
+for (let i = 0; i < NUM_KEYS; i++) {
+    const [semitone] = NOTE_RANGE[i];
+    const group = SWARA_GROUP[semitone];
+
+    const div = document.createElement("div");
+    div.className = "key";
+    if (prevGroup !== null && group !== prevGroup) div.classList.add("group-gap");
+    prevGroup = group;
+
+    const kc = document.createElement("div");
+    kc.className = "kc";
+    kc.textContent = KEY_CHARS[i].toUpperCase();
+
+    const lab = document.createElement("div");
+    lab.className = "lab";
+    lab.textContent = swaraLabelForNote(i);
+
+    const full = document.createElement("div");
+    full.className = "full";
+    full.textContent = SWARA_FULL[semitone];
+
+    div.appendChild(kc);
+    div.appendChild(lab);
+    div.appendChild(full);
+    keysEl.appendChild(div);
+    keyEls.push(div);
+
+    div.addEventListener("mousedown", () => triggerNote(i));
+    div.addEventListener("touchstart", (e) => { e.preventDefault(); triggerNote(i); }, {passive: false});
+}
+
+function triggerNote(idx) {
+    const [semitone, octave] = NOTE_RANGE[idx];
+    const freq = getFreq(semitone, sruthiIdx, octave);
+    playNote(semitone, octave, 550);
+    flashKey(idx);
+
+    const label = swaraLabelForNote(idx);
+    let inRagam = "";
+    if (mode === 1) {
+        const active = ragamActiveSet(RAGAMS[ragamIdx]);
+        inRagam = active.has(semitone) ? "  [in ragam]" : "  [outside ragam]";
+    }
+    console.log(`${label}  ${SWARA_FULL[semitone]}  ${freq.toFixed(2)} Hz${inRagam}`);
+}
+
+let flashTimer = null;
+function flashKey(idx) {
+    keyEls.forEach(el => el.classList.remove("pressed"));
+    keyEls[idx].classList.add("pressed");
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => keyEls[idx].classList.remove("pressed"), 250);
+}
+
+// ─── RENDER (mode/sruthi/ragam dependent styling) ───────────────────
+function render() {
+    document.getElementById("modeLabel").textContent = mode === 0 ? "SWARA MODE" : "RAGAM MODE";
+    document.getElementById("modeBtn").className = mode === 0 ? "mode-swara" : "mode-ragam";
+    document.getElementById("sruthiLabel").textContent = SRUTHI_NAMES[sruthiIdx];
+
+    const ragamControls = document.getElementById("ragamControls");
+    const ragamPanel = document.getElementById("ragamPanel");
+    ragamControls.style.display = mode === 1 ? "inline" : "none";
+    ragamPanel.style.display = mode === 1 ? "block" : "none";
+
+    let ragamActive = null;
+    if (mode === 1) {
+        const ragam = RAGAMS[ragamIdx];
+        ragamActive = ragamActiveSet(ragam);
+        document.getElementById("ragamLabel").textContent = ragam.name;
+        document.getElementById("ragamMelakarta").textContent =
+            ragam.melakarta > 0 ? `Melakarta #${ragam.melakarta}` : "Janya ragam";
+        document.getElementById("ragamAro").textContent =
+            ragam.arohanam.map(s => s === 12 ? "S'" : SWARA_SHORT[s]).join(" ");
+        document.getElementById("ragamAva").textContent =
+            ragam.avarohanam.map(s => s === 12 ? "S'" : SWARA_SHORT[s]).join(" ");
+    }
+
+    for (let i = 0; i < NUM_KEYS; i++) {
+        const [semitone] = NOTE_RANGE[i];
+        const el = keyEls[i];
+        const isActive = mode === 1 && ragamActive.has(semitone);
+        el.classList.toggle("active", isActive);
+
+        const kc = el.querySelector(".kc");
+        const lab = el.querySelector(".lab");
+        const full = el.querySelector(".full");
+        let color;
+        if (isActive) color = "var(--green)";
+        else if (mode === 1) color = "var(--dim)";
+        else color = GROUP_COLORS[SWARA_GROUP[semitone]] || "var(--text)";
+        kc.style.color = color;
+        lab.style.color = color;
+        full.style.color = color;
+    }
+}
+
+// ─── ACTIONS ─────────────────────────────────────────────────────────
+function changeSruthi(delta) {
+    sruthiIdx = (sruthiIdx + delta + 12) % 12;
+    playNote(0, 0, 300);
+    render();
+}
+
+function toggleMode() {
+    mode = 1 - mode;
+    render();
+}
+
+function changeRagam(delta) {
+    ragamIdx = (ragamIdx + delta + RAGAMS.length) % RAGAMS.length;
+    render();
+}
+
+function playSequence(semitones) {
+    let t = 0;
+    for (const s of semitones) {
+        const octShift = s === 12 ? 1 : 0;
+        const realS = s === 12 ? 0 : s;
+        setTimeout(() => {
+            playNote(realS, octShift, 400);
+        }, t);
+        t += 420;
+    }
+}
+
+function playArohanam() { playSequence(RAGAMS[ragamIdx].arohanam); }
+function playAvarohanam() { playSequence(RAGAMS[ragamIdx].avarohanam); }
+
+// ─── INSTRUMENT SELECT UI ─────────────────────────────────────────────
+const instrumentSelect = document.getElementById("instrumentSelect");
+for (const inst of INSTRUMENTS) {
+    const opt = document.createElement("option");
+    opt.value = inst.name === null ? "" : inst.name;
+    opt.textContent = inst.label;
+    instrumentSelect.appendChild(opt);
+}
+instrumentSelect.value = INSTRUMENTS[0].name;
+instrumentSelect.addEventListener("change", () => {
+    loadInstrument(instrumentSelect.value || null);
+});
+
+// ─── VOLUME SLIDER ─────────────────────────────────────────────────────
+const volumeSlider = document.getElementById("volumeSlider");
+volumeSlider.value = Math.round(masterVolume * 100);
+volumeSlider.addEventListener("input", () => {
+    masterVolume = volumeSlider.value / 100;
+});
+
+// ─── WIRE UP BUTTONS ──────────────────────────────────────────────────
+document.getElementById("modeBtn").addEventListener("click", toggleMode);
+document.getElementById("sruthiUp").addEventListener("click", () => changeSruthi(1));
+document.getElementById("sruthiDown").addEventListener("click", () => changeSruthi(-1));
+document.getElementById("ragamNext").addEventListener("click", () => changeRagam(1));
+document.getElementById("ragamPrev").addEventListener("click", () => changeRagam(-1));
+document.getElementById("playAro").addEventListener("click", playArohanam);
+document.getElementById("playAva").addEventListener("click", playAvarohanam);
+
+// ─── KEYBOARD LISTENER ─────────────────────────────────────────────────
+window.addEventListener("keydown", (e) => {
+    if (e.repeat) return;
+    const key = e.key;
+
+    if (key === "ArrowUp") { e.preventDefault(); changeSruthi(1); return; }
+    if (key === "ArrowDown") { e.preventDefault(); changeSruthi(-1); return; }
+    if (key === "Tab") { e.preventDefault(); toggleMode(); return; }
+    if (key === "PageUp" && mode === 1) { e.preventDefault(); changeRagam(1); return; }
+    if (key === "PageDown" && mode === 1) { e.preventDefault(); changeRagam(-1); return; }
+    if (key === "Enter" && mode === 1) { e.preventDefault(); playArohanam(); return; }
+    if (key === "Backspace" && mode === 1) { e.preventDefault(); playAvarohanam(); return; }
+
+    const ci = KEY_CHARS.indexOf(key.toLowerCase());
+    if (ci !== -1) {
+        e.preventDefault();
+        triggerNote(ci);
+    }
+});
+
+// ─── AUDIO UNLOCK OVERLAY (browsers block audio before user gesture) ──
+const overlay = document.getElementById("startOverlay");
+overlay.addEventListener("click", () => {
+    audioCtx.resume().then(() => {
+        overlay.style.display = "none";
+        loadInstrument(instrumentSelect.value || null);
+    });
+});
+
+render();
+</script>
+</body>
+</html>
