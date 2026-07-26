@@ -184,7 +184,7 @@
     color: var(--green);
     border-color: var(--green);
   }
-  input#bpmInput {
+  input#bpmInput, input#notesPerBeatInput {
     width: 60px;
     background: var(--key-bg);
     color: var(--text);
@@ -192,6 +192,12 @@
     border-radius: 5px;
     padding: 4px 6px;
     font-family: inherit;
+    font-size: 13px;
+  }
+  .row label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     font-size: 13px;
   }
   select#droneSelect {
@@ -273,7 +279,9 @@
 <div class="row">
   <button id="metronomeBtn">Metronome: OFF</button>
   <span>BPM: <input type="number" id="bpmInput" min="20" max="300" value="80"></span>
+  <span>Notes/beat: <input type="number" id="notesPerBeatInput" min="1" max="8" value="1"></span>
   <span id="beatDot"></span>
+  <label><input type="checkbox" id="fastNotesCheckbox"> Fast notes (UPPERCASE = quarter, lowercase = eighth)</label>
   <button id="shrutiBoxBtn">Shruti Box: OFF</button>
   <span>Drone: <select id="droneSelect">
     <option value="pa">Sa + Pa</option>
@@ -305,7 +313,9 @@
   <textarea id="notationTextArea" rows="4" placeholder="Paste swaram-only notation lines here, or load a .txt file — e.g. p,,, pmg, g,,, r,s, ,,,, d.,n., s,,,"></textarea>
   <div id="notationHint">
     Notes run together play consecutively (pmg = P, M, G); a comma repeats the previous note; digits (r1, g2) pick a variant; ' / . mark upper/lower octave, same as elsewhere.
-    Bars (|), spaces and anything else are ignored. Paste only the swaram line(s) — not lyrics or headers. Plays at the BPM above.
+    Ḍ/Ṇ and Ṡ/Ṙ/Ġ/Ṁ (dot-below/dot-above, as printed in notation sheets) also work directly as lower/upper octave.
+    Lines starting with # are comments and are skipped — use them for section labels. Bars (|), spaces and anything else are ignored.
+    Paste only the swaram line(s) — not lyrics or headers. Plays using BPM × Notes/beat; check "Fast notes" to make lowercase letters play at half the duration of uppercase.
   </div>
 </div>
 
@@ -482,33 +492,47 @@ function flashKeyForNote(semitone, octaveShift) {
 
 function playSwaraInput() {
     const notes = parseSwaraString(swaraInput.value);
-    const beat = beatMs();
-    const noteDur = Math.min(400, beat * 0.85);
+    const interval = noteIntervalMs();
+    const noteDur = Math.min(400, interval * 0.85);
     let t = 0;
     for (const { semitone, octaveShift } of notes) {
         setTimeout(() => {
             playNote(semitone, octaveShift, noteDur);
             flashKeyForNote(semitone, octaveShift);
         }, t);
-        t += beat;
+        t += interval;
     }
 }
 
 // ─── NOTATION FILE PLAYER ──────────────────────────────────────────
 // Reads traditional printed swaram notation, e.g. from a composition sheet:
-//   P , , , | P M G , G , , , || R , S , | , , , , D. , N. , ||
+//   P , , , | P M G , G , , , || R , S , | , , , , Ḍ , Ṇ , ||
 // Notes run together with no separator (letters only) play consecutively;
 // a comma repeats the previous note (a held/continued beat, as in printed
-// notation); '|' bars, spaces, and anything unrecognized are ignored. This
-// intentionally only understands the swaram line itself — lyrics, section
-// headers, and avartanam numbers must be excluded by whoever pastes the text.
+// notation); '|' bars, spaces, and anything unrecognized are ignored. Lines
+// starting with '#' are comments. This intentionally only understands the
+// swaram line itself — lyrics, section headers, and avartanam numbers must
+// be excluded (or put behind '#') by whoever pastes the text.
+
+// Precomposed dot-above/dot-below letters as printed in notation sheets:
+// Ḍ/Ṇ = D/N in the lower octave, Ṡ/Ṙ/Ġ/Ṁ = S/R/G/M in the upper octave.
+const NOTATION_UNICODE_MAP = {
+    "Ḍ": { letter: "d", octaveShift: -1, isUpper: true }, "ḍ": { letter: "d", octaveShift: -1, isUpper: false },
+    "Ṇ": { letter: "n", octaveShift: -1, isUpper: true }, "ṇ": { letter: "n", octaveShift: -1, isUpper: false },
+    "Ṡ": { letter: "s", octaveShift: 1, isUpper: true },  "ṡ": { letter: "s", octaveShift: 1, isUpper: false },
+    "Ṙ": { letter: "r", octaveShift: 1, isUpper: true },  "ṙ": { letter: "r", octaveShift: 1, isUpper: false },
+    "Ġ": { letter: "g", octaveShift: 1, isUpper: true },  "ġ": { letter: "g", octaveShift: 1, isUpper: false },
+    "Ṁ": { letter: "m", octaveShift: 1, isUpper: true },  "ṁ": { letter: "m", octaveShift: 1, isUpper: false },
+};
+
 function parseNotationDocument(text) {
     const resolutionRagam = mode === 1 ? RAGAMS[ragamIdx] : RAGAMS[DEFAULT_RAGAM_IDX];
     const activeSet = ragamActiveSet(resolutionRagam);
 
-    const notes = [];
+    const notes = []; // {semitone, octaveShift, isUpper}
     let last = null;
     for (const line of text.split(/\r?\n/)) {
+        if (line.trim().startsWith("#")) continue;
         let i = 0;
         while (i < line.length) {
             const ch = line[i];
@@ -517,8 +541,24 @@ function parseNotationDocument(text) {
                 i++;
                 continue;
             }
+
+            const unicodeInfo = NOTATION_UNICODE_MAP[ch];
+            if (unicodeInfo) {
+                i++;
+                let digit = "";
+                if (i < line.length && /[1-3]/.test(line[i])) { digit = line[i]; i++; }
+                const semitone = resolveSemitone(unicodeInfo.letter, digit, activeSet);
+                if (semitone !== null) {
+                    const note = { semitone, octaveShift: unicodeInfo.octaveShift, isUpper: unicodeInfo.isUpper };
+                    notes.push(note);
+                    last = note;
+                }
+                continue;
+            }
+
             const letter = ch.toLowerCase();
             if ("srgmpdn".includes(letter)) {
+                const isUpper = ch !== letter;
                 i++;
                 let digit = "";
                 if (i < line.length && /[1-3]/.test(line[i])) { digit = line[i]; i++; }
@@ -529,7 +569,7 @@ function parseNotationDocument(text) {
                 }
                 const semitone = resolveSemitone(letter, digit, activeSet);
                 if (semitone !== null) {
-                    const note = { semitone, octaveShift };
+                    const note = { semitone, octaveShift, isUpper };
                     notes.push(note);
                     last = note;
                 }
@@ -542,6 +582,7 @@ function parseNotationDocument(text) {
 }
 
 let notationTimeouts = [];
+let fastNotesEnabled = false;
 
 function stopNotationPlayback() {
     notationTimeouts.forEach(id => clearTimeout(id));
@@ -551,16 +592,19 @@ function stopNotationPlayback() {
 function playNotationText() {
     stopNotationPlayback();
     const notes = parseNotationDocument(notationTextArea.value);
-    const beat = beatMs();
-    const noteDur = Math.min(400, beat * 0.85);
+    const interval = noteIntervalMs();
     let t = 0;
-    for (const { semitone, octaveShift } of notes) {
+    for (const { semitone, octaveShift, isUpper } of notes) {
+        // With "fast notes" on, lowercase letters (as printed for quick/ornamental
+        // runs, e.g. "dp" inside "P M-G M P dp M G") take half the normal slot.
+        const slot = (fastNotesEnabled && !isUpper) ? interval / 2 : interval;
+        const noteDur = Math.min(400, slot * 0.85);
         const id = setTimeout(() => {
             playNote(semitone, octaveShift, noteDur);
             flashKeyForNote(semitone, octaveShift);
         }, t);
         notationTimeouts.push(id);
-        t += beat;
+        t += slot;
     }
 }
 
@@ -846,13 +890,17 @@ function changeRagam(delta) {
     render();
 }
 
-// All timed sequences (arohanam/avarohanam, typed swara strings) play in
-// tempo with the metronome's BPM, so practice stays in one consistent pulse.
+// All timed sequences (arohanam/avarohanam, typed swara strings, notation
+// playback) play in tempo with the metronome's BPM, so practice stays in one
+// consistent pulse. Notes/beat subdivides each beat (e.g. 4 for a fast piece
+// with 4 notes per talam count) without changing the metronome's click rate.
+let notesPerBeat = 1;
 function beatMs() { return 60000 / bpm; }
+function noteIntervalMs() { return beatMs() / notesPerBeat; }
 
 function playSequence(semitones) {
-    const beat = beatMs();
-    const noteDur = Math.min(400, beat * 0.85);
+    const interval = noteIntervalMs();
+    const noteDur = Math.min(400, interval * 0.85);
     let t = 0;
     for (const s of semitones) {
         const octShift = s === 12 ? 1 : 0;
@@ -860,7 +908,7 @@ function playSequence(semitones) {
         setTimeout(() => {
             playNote(realS, octShift, noteDur);
         }, t);
-        t += beat;
+        t += interval;
     }
 }
 
@@ -1014,6 +1062,16 @@ metronomeBtn.addEventListener("click", () => {
 });
 bpmInput.addEventListener("input", () => {
     bpm = Math.min(300, Math.max(20, parseInt(bpmInput.value, 10) || 80));
+});
+
+const notesPerBeatInput = document.getElementById("notesPerBeatInput");
+notesPerBeatInput.addEventListener("input", () => {
+    notesPerBeat = Math.min(8, Math.max(1, parseInt(notesPerBeatInput.value, 10) || 1));
+});
+
+const fastNotesCheckbox = document.getElementById("fastNotesCheckbox");
+fastNotesCheckbox.addEventListener("change", () => {
+    fastNotesEnabled = fastNotesCheckbox.checked;
 });
 
 // ─── SHRUTI BOX UI ─────────────────────────────────────────────────────
