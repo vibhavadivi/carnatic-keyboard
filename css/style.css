@@ -1,0 +1,240 @@
+:root {
+  --bg: #0c0e14;
+  --panel: #161a24;
+  --text: #e6e6eb;
+  --dim: #5a5f6e;
+  --gold: #ffc85a;
+  --green: #5adc82;
+  --green-bg: #143723;
+  --orange: #ff963c;
+  --key-bg: #232834;
+  --key-border: #3c4252;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Consolas", "Courier New", monospace;
+  min-height: 100vh;
+  padding: 20px;
+}
+h1 {
+  color: var(--gold);
+  font-size: 26px;
+  margin: 0 0 12px 0;
+  letter-spacing: 1px;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 10px;
+  font-size: 15px;
+}
+.row button {
+  background: var(--key-bg);
+  color: var(--text);
+  border: 1px solid var(--key-border);
+  border-radius: 5px;
+  padding: 5px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.row button:hover { border-color: var(--gold); color: var(--gold); }
+.mode-swara { color: var(--text); }
+.mode-ragam { color: var(--green); }
+#ragamPanel {
+  display: none;
+  background: var(--panel);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-size: 14px;
+}
+#ragamPanel .mk { color: var(--dim); font-size: 12px; margin-bottom: 4px; }
+#ragamPanel .line { margin: 2px 0; }
+#keysWrap {
+  overflow-x: auto;
+  padding-bottom: 10px;
+}
+#keys {
+  display: flex;
+  min-width: max-content;
+}
+.key {
+  width: 54px;
+  height: 240px;
+  margin-right: 3px;
+  background: var(--key-bg);
+  border: 2px solid var(--key-border);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 10px;
+  user-select: none;
+  cursor: pointer;
+  transition: background 0.05s, border-color 0.05s;
+  flex-shrink: 0;
+}
+.key.group-gap { margin-left: 6px; }
+.key .kc {
+  font-size: 20px;
+  font-weight: bold;
+  margin-bottom: 30px;
+}
+.key .lab {
+  font-size: 16px;
+  margin-bottom: 6px;
+}
+.key .full {
+  font-size: 11px;
+  line-height: 15px;
+  text-align: center;
+  margin-top: auto;
+  margin-bottom: 10px;
+  padding: 0 2px;
+}
+.key.active {
+  background: var(--green-bg);
+  border-color: var(--green);
+}
+.key.pressed {
+  background: var(--gold) !important;
+  border-color: #fff !important;
+}
+.key.pressed .kc, .key.pressed .lab, .key.pressed .full {
+  color: #141414 !important;
+}
+footer {
+  margin-top: 18px;
+  font-size: 12px;
+  color: var(--dim);
+}
+#startOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(12,14,20,0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  cursor: pointer;
+}
+#startOverlay div {
+  color: var(--gold);
+  font-size: 18px;
+  border: 1px solid var(--key-border);
+  padding: 20px 30px;
+  border-radius: 8px;
+  background: var(--panel);
+}
+select#instrumentSelect {
+  background: var(--key-bg);
+  color: var(--text);
+  border: 1px solid var(--key-border);
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 13px;
+}
+#instrumentStatus {
+  font-size: 12px;
+  color: var(--dim);
+}
+#instrumentStatus.loading { color: var(--orange); }
+input#volumeSlider {
+  vertical-align: middle;
+  accent-color: var(--gold);
+}
+#swaraBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+#swaraInput {
+  flex: 1;
+  max-width: 520px;
+  background: var(--key-bg);
+  color: var(--text);
+  border: 1px solid var(--key-border);
+  border-radius: 5px;
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 14px;
+}
+#swaraInput:focus { border-color: var(--gold); outline: none; }
+#swaraHint {
+  font-size: 12px;
+  color: var(--dim);
+}
+.row button.toggle-on {
+  color: var(--green);
+  border-color: var(--green);
+}
+input#bpmInput, input#notesPerBeatInput {
+  width: 60px;
+  background: var(--key-bg);
+  color: var(--text);
+  border: 1px solid var(--key-border);
+  border-radius: 5px;
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 13px;
+}
+.row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+}
+select#droneSelect {
+  background: var(--key-bg);
+  color: var(--text);
+  border: 1px solid var(--key-border);
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 13px;
+}
+#beatDot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--key-border);
+  vertical-align: middle;
+  transition: background 0.05s, transform 0.05s;
+}
+#beatDot.pulse {
+  background: var(--gold);
+  transform: scale(1.3);
+}
+#notationBar {
+  margin-bottom: 14px;
+}
+#notationTextArea {
+  width: 100%;
+  max-width: 720px;
+  background: var(--key-bg);
+  color: var(--text);
+  border: 1px solid var(--key-border);
+  border-radius: 5px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+  display: block;
+  margin-top: 6px;
+}
+#notationTextArea:focus { border-color: var(--gold); outline: none; }
+#notationHint {
+  font-size: 12px;
+  color: var(--dim);
+  max-width: 720px;
+  margin-top: 4px;
+}
